@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title></title>
+    <style type="text/css">
+        body {
+            font-family: "Helvetica Neue", "Arial", sans-serif;
+        }
+        #polySettings > div:nth-child(2n) {
+            background-color: #CCCCCC;
+        }
+        .enableColumn {
+            width: 60px;
+        }
+        .colorColumn {
+            width: 140px;
+        }
+        .degreeColumn {
+            width: 80px;
+        }
+        .xIntervalColumn {
+            width: 80px;
+        }
+        .equationColumn {
+        }
+        .column {
+            margin-right: 10px;
+            display: inline-block;
+        }
+        .enableColumn > input {
+            width: 100%;
+        }
+        .colorColumn > input {
+            width: 100%;
+        }
+        .degreeColumn > input {
+            width: 100%;
+        }
+        .xIntervalColumn > input {
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+<canvas id="myCanvas" width="800" height="600" style="border:2px solid black;margin:auto"></canvas>
+<input type="button" value="Clear" id="clearBtn">
+
+<div id="polySettings">
+    <div>
+        <span class="enableColumn column">Enable</span>
+        <span class="colorColumn column">Color</span>
+        <span class="degreeColumn column">Degree</span>
+        <span class="xIntervalColumn column">x Interval</span>
+        <span class="equationColumn column">Equation</span>
+    </div>
+    <div class="polyRow">
+        <span class="enableColumn column"><input type="checkbox" class="isEnabled"></span>
+        <span class="colorColumn column"><input type="color" class="color"></span>
+        <span class="degreeColumn column"><input type="number" class="degree" value="1"></span>
+        <span class="xIntervalColumn column"><input type="number" class="xInterval" value="5"></span>
+        <span class="equationColumn column"><span class="equation"></span></span>
+    </div>
+</div>
+<script type="text/javascript">
+    var rows = document.querySelector('#polySettings');
+    for(var i = 2; i < 6; i++){
+        rows.appendChild(rows.querySelector('#polySettings > div.polyRow').cloneNode(true));
+        rows.children[i].querySelector('.degree').value = i;
+        rows.children[i].querySelector('.color').value = '#'+Math.floor(Math.random()*16777215).toString(16); // http://www.paulirish.com/2009/random-hex-color-code-snippets/
+    }
+    // http://stackoverflow.com/questions/55677/how-do-i-get-the-coordinates-of-a-mouse-click-on-a-canvas-element
+    function relMouseCoords(event) {
+        var totalOffsetX = 0;
+        var totalOffsetY = 0;
+        var canvasX = 0;
+        var canvasY = 0;
+        var currentElement = this;
+
+        do {
+            totalOffsetX += currentElement.offsetLeft - currentElement.scrollLeft;
+            totalOffsetY += currentElement.offsetTop - currentElement.scrollTop;
+        }
+        while (currentElement = currentElement.offsetParent)
+
+        canvasX = event.pageX - totalOffsetX;
+        canvasY = event.pageY - totalOffsetY;
+
+        return {x: canvasX, y: canvasY}
+    }
+    HTMLCanvasElement.prototype.relMouseCoords = relMouseCoords;
+    var points = [];
+    function addPoint(coords) {
+        points = points.concat(coords);
+        render();
+    }
+    function render() {
+        var context = getContext();
+        context.canvas.width = context.canvas.width;
+        [].slice.call(document.getElementById('polySettings').querySelectorAll('.polyRow')).forEach(function (polyRow) {
+            if (polyRow.querySelector('.isEnabled').checked) {
+                var degree = parseInt(polyRow.querySelector('.degree').value);
+                if (points.length > degree) {
+                    var coefficients = doGJE(makeGJEMatrix(degree + 1)).map(function (row) {
+                        return row[degree + 1]
+                    });
+                    drawCurve(coefficients, polyRow.querySelector('.color').value, parseInt(polyRow.querySelector('.xInterval').value));
+                    polyRow.querySelector('.equation').innerHTML = textEquation(coefficients);
+                }
+            }
+        });
+        drawPoints();
+    }
+    function textEquation(coefficients) {
+        var equation = '' + coefficients.shift().toExponential(4);
+        var i = 0;
+        coefficients.forEach(function (c) {
+            equation += (' + ' + c.toExponential(4) + 'x<sup>' + ++i + '</sup>');
+        });
+        return equation;
+    }
+    function drawCurve(polynomial, color, xInterval) {
+        var canvasWidth = document.getElementById("myCanvas").width;
+        var linePoints = [];
+        for (var x = 1; x < canvasWidth + 1; x += xInterval) {
+            var y = polynomial[0];
+            for (var exp = 1; exp < polynomial.length; exp++) {
+                y += (Math.pow(x, exp) * polynomial[exp]);
+            }
+            linePoints.push({x: x, y: y});
+        }
+        for (var i = 0; i < linePoints.length - 1; i++) {
+            drawLine(linePoints[i], linePoints[i + 1], color);
+        }
+    }
+    function drawLine(startPoint, endPoint, color) {
+        var c = getContext();
+        c.beginPath();
+        c.moveTo(startPoint.x, startPoint.y);
+        c.lineTo(endPoint.x, endPoint.y);
+        var previousColor = c.strokeStyle;
+        c.lineWidth = 3;
+        c.strokeStyle = color;
+        c.stroke();
+        c.strokeStyle = previousColor;
+    }
+    function getContext() {
+        return document.getElementById("myCanvas").getContext("2d");
+    }
+    function drawPoints() {
+        for (var i = 0; i < points.length; i++) {
+            drawPoint(points[i]);
+        }
+    }
+    function drawPoint(coords) {
+        var c = getContext();
+        var radius = 2;
+        c.beginPath();
+        c.lineWidth = 2;
+        c.arc(coords.x - (radius / 2), coords.y - (radius / 2), 3, 0, 2 * Math.PI);
+        c.stroke();
+    }
+    function xNSum(pow) {
+        var sum = 0;
+        for (var i = 0; i < points.length; i++) {
+            sum += (Math.pow(points[i].x, pow))
+        }
+        return sum;
+    }
+    function xNySum(pow) {
+        var sum = 0;
+        for (var i = 0; i < points.length; i++) {
+            sum += (Math.pow(points[i].x, pow) * points[i].y)
+        }
+        return sum;
+    }
+    // http://arachnoid.com/sage/polynomial.html
+    function makeGJEMatrix(pow) {
+        var matrix = [];
+        for (var row_index = 0; row_index < pow; row_index++) {
+            var row = [];
+            for (var col_index = 0; col_index < pow; col_index++) {
+                row.push(xNSum(row_index + col_index));
+            }
+            row.push(xNySum(row_index));
+            matrix.push(row);
+        }
+        return matrix;
+    }
+    // http://www.engineering.ucsb.edu/~hpscicom/projects/gauss/introge.pdf
+    function doGJE(matrix) {
+        var n = matrix.length;
+        for (var k = 0; k < n - 1; k++) {
+            for (var i = k + 1; i < n; i++) {
+                matrix[i][k] = matrix[i][k] / matrix[k][k];
+                for (var j = k + 1; j < n + 1; j++) {
+                    matrix[i][j] = matrix[i][j] - (matrix[i][k] * matrix[k][j]);
+                }
+            }
+        }
+        for (var i = n - 1; i >= 0; i--) {
+            for (var j = i + 1; j < n; j++) {
+                matrix[i][n] = matrix[i][n] - (matrix[i][j] * matrix[j][n]);
+            }
+            matrix[i][n] = matrix[i][n] / matrix[i][i];
+        }
+        return matrix;
+    }
+    function clearReg() {
+        points = [];
+        render();
+    }
+    document.getElementById("myCanvas").onclick = function (event) {
+        addPoint(this.relMouseCoords(event));
+    };
+    document.getElementById("clearBtn").onclick = function () {
+        clearReg();
+    };
+    [].slice.call(document.querySelectorAll("input")).forEach(function (i) {
+        i.onchange = function () {
+            render();
+        }
+    });
+</script>
+</body>
+</html>

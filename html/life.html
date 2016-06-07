@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html>
+<head>
+</head>
+<body>
+<div>
+    <label for="rows">Rows</label><input type="number" id="rows" value="54"></input><br>
+    <label for="columns">Columns</label><input type="number" id="columns" value="96"></input>
+    <label for="cellsize">Grid Size</label><input type="number" id="cellsize" value="10"></input>
+    <label for="interval">Interval (ms)</label><input type="number" id="interval" value="100"></input>
+    <input id="reset" type="button" value="Reset"/>
+    <input id="start" type="button" value="Start"/>
+    <label for="togglegrid">Show Grid</label><input id="togglegrid" type="checkbox" checked="checked"/>
+</div>
+<canvas id="myCanvas" style="border:2px solid black;margin:auto"></canvas>
+
+<!-- <div class="wrapper">
+    <div id="content">
+        <table id="board"></table>
+    </div>
+</div> -->
+<script type="text/javascript">
+    // http://stackoverflow.com/questions/55677/how-do-i-get-the-coordinates-of-a-mouse-click-on-a-canvas-element
+    function relMouseCoords(event) {
+        var totalOffsetX = 0;
+        var totalOffsetY = 0;
+        var canvasX = 0;
+        var canvasY = 0;
+        var currentElement = this;
+
+        do {
+            totalOffsetX += currentElement.offsetLeft - currentElement.scrollLeft;
+            totalOffsetY += currentElement.offsetTop - currentElement.scrollTop;
+        }
+        while (currentElement = currentElement.offsetParent)
+
+        totalOffsetX += parseInt(this.style.borderLeftWidth);
+        totalOffsetY += parseInt(this.style.borderTopWidth);
+
+        canvasX = event.pageX - totalOffsetX;
+        canvasY = event.pageY - totalOffsetY;
+
+        return {x: canvasX, y: canvasY}
+    }
+    HTMLCanvasElement.prototype.relMouseCoords = relMouseCoords;
+    state = {};
+    function reset() {
+        stop();
+        var rows = parseInt(document.getElementById('rows').value);
+        var columns = parseInt(document.getElementById('columns').value);
+        var cellSize = parseInt(document.getElementById('cellsize').value);
+        var interval = parseInt(document.getElementById('interval').value);
+        state = {cells: newCells(columns, rows), cellSize: cellSize, gridEnabled: document.getElementById('togglegrid').checked, interval: interval};
+        var canvas = document.getElementById("myCanvas");
+        canvas.width = columns * state.cellSize;
+        canvas.height = rows * state.cellSize;
+        canvas.onclick = function (event) {
+            if (!running) {
+                var coords = this.relMouseCoords(event);
+                coords.x = Math.floor(coords.x / state.cellSize);
+                coords.y = Math.floor(coords.y / state.cellSize);
+                state.cells[coords.x][coords.y] = !state.cells[coords.x][coords.y];
+                fillCell(coords.x, coords.y, state.cells[coords.x][coords.y] ? 'black' : 'white');
+            }
+        };
+        drawGrid();
+    };
+    document.getElementById('reset').onclick = reset;
+    document.getElementById('rows').onchange = reset;
+    document.getElementById('columns').onchange = reset;
+    document.getElementById('cellsize').onchange = reset;
+    document.getElementById('interval').onchange = function() {
+        state.interval = parseInt(this.value);
+    };
+    function newCells(cols, rows) {
+        var a = new Array(cols);
+        for (var col = 0; col < cols; col++) {
+            a[col] = new Array(rows);
+            for (var row = 0; row < rows; row++) {
+                a[col][row] = false;
+            }
+        }
+        return a;
+    }
+    function fillCell(col, row, color) {
+        var c = document.getElementById("myCanvas").getContext("2d");
+        c.beginPath();
+        c.fillStyle = color;
+        c.rect(col * state.cellSize + 1, row * state.cellSize + 1, state.cellSize - 2, state.cellSize - 2);
+        c.fill();
+    }
+    function drawCells() {
+        for (var col = 0; col < state.cells.length; col++) {
+            for (var row = 0; row < state.cells[col].length; row++) {
+                fillCell(col, row, state.cells[col][row] ? 'black' : 'white');
+            }
+        }
+    }
+    function drawGrid() {
+        if (!state.gridEnabled)
+            return false;
+        var canvas = document.getElementById("myCanvas");
+        var c = canvas.getContext("2d");
+        c.globalAlpha = 1;
+        c.strokeStyle = 'grey';
+        c.lineWidth = 1;
+        var h = canvas.height;
+        var w = canvas.width;
+        for (var i = 0; i <= h; i += state.cellSize) {
+            c.beginPath();
+            c.moveTo(0, i);
+            c.lineTo(w, i);
+            c.stroke();
+        }
+        for (var i = 0; i <= w; i += state.cellSize) {
+            c.beginPath();
+            c.moveTo(i, 0);
+            c.lineTo(i, h);
+            c.stroke();
+        }
+    }
+    function stop() {
+        if (running) {
+            clearInterval(running);
+            running = false;
+        }
+        document.getElementById('start').value = 'Start';
+        document.getElementById('rows').disabled = false;
+        document.getElementById('columns').disabled = false;
+        document.getElementById('cellsize').disabled = false;
+        document.getElementById('togglegrid').disabled = false;
+        document.getElementById('interval').disabled = false;
+    }
+    function start() {
+        running = window.setInterval(doStep, state.interval);
+        document.getElementById('start').value = 'Stop';
+        document.getElementById('rows').disabled = true;
+        document.getElementById('columns').disabled = true;
+        document.getElementById('cellsize').disabled = true;
+        document.getElementById('togglegrid').disabled = true;
+        document.getElementById('interval').disabled = true;
+    }
+    running = false;
+    document.getElementById('start').onclick = function () {
+        running ? stop() : start();
+    };
+    document.getElementById('togglegrid').onchange = function () {
+        state.gridEnabled = this.checked;
+        var canvas = document.getElementById("myCanvas");
+        var c = canvas.getContext("2d");
+        c.clearRect(0, 0, canvas.width, canvas.height);
+        drawCells();
+        drawGrid();
+    };
+    function liveNeighbors(col, row) {
+        var neighbors = 0;
+        for (var x = col - 1; x < col + 2; x++) {
+            for (var y = row - 1; y < row + 2; y++) {
+                if (x === col && y === row) continue;
+                neighbors += !!(state.cells[x] && state.cells[x][y]);
+            }
+        }
+        return neighbors;
+    }
+    var doStep = function () {
+        var time = (new Date()).getTime();
+        var newState = {cells: newCells(state.cells.length, state.cells[0].length), cellSize: state.cellSize, gridEnabled: state.gridEnabled, interval: state.interval};
+        for (var col = 0; col < state.cells.length; col++) {
+            for (var row = 0; row < state.cells[col].length; row++) {
+                var alive = state.cells[col][row];
+                var neighbors = liveNeighbors(col, row);
+                if (alive && (neighbors < 2 || neighbors > 3)) { // death
+                    fillCell(col, row, 'white');
+                    newState.cells[row][col] = false;
+                } else if (!alive && neighbors == 3) { // life
+                    fillCell(col, row, 'black');
+                    newState.cells[col][row] = true;
+                } else {
+                    newState.cells[col][row] = state.cells[col][row];
+                }
+            }
+        }
+        state = newState;
+    };
+    reset();
+    //Any live cell with fewer than two live neighbours dies, as if caused by under-population.
+    //Any live cell with two or three live neighbours lives on to the next generation.
+    //Any live cell with more than three live neighbours dies, as if by over-population.
+    //Any dead cell with exactly three live neighbours becomes a live cell, as if by reproduction.
+</script>
+</body>
+</html>
