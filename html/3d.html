@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title></title>
+    <style type="text/css">
+        body {
+            font-family: "Helvetica Neue", "Arial", sans-serif;
+        }
+    </style>
+</head>
+<body>
+<canvas id="myCanvas" width="800" height="600" style="border:2px solid black;margin:auto"></canvas>
+<input type="button" value="Clear" id="clearBtn">
+<div>
+    Camera Position<br/>
+    <label> x: <input type="number" value="5" id="cameraX" step="any"></label><br/>
+    <label> y: <input type="number" value="5" id="cameraY" step="any"></label><br/>
+    <label> z: <input type="number" value="2" id="cameraZ" step="any"></label><br/>
+</div>
+<div>
+    Camera Focus<br/>
+    <label> x: <input type="number" value="0" id="focusX" step="any"></label><br/>
+    <label> y: <input type="number" value="0" id="focusY" step="any"></label><br/>
+    <label> z: <input type="number" value="0" id="focusZ" step="any"></label><br/>
+</div>
+<input type="button" value="Rotate" id="rotate"><br/>
+Camera Horizontal FoV<br/>
+<input type="number" value="60" id="cameraFov">
+<script type="text/javascript">
+    // http://stackoverflow.com/questions/55677/how-do-i-get-the-coordinates-of-a-mouse-click-on-a-canvas-element
+    function relMouseCoords(event) {
+        var totalOffsetX = 0;
+        var totalOffsetY = 0;
+        var canvasX = 0;
+        var canvasY = 0;
+        var currentElement = this;
+
+        do {
+            totalOffsetX += currentElement.offsetLeft - currentElement.scrollLeft;
+            totalOffsetY += currentElement.offsetTop - currentElement.scrollTop;
+        }
+        while (currentElement = currentElement.offsetParent)
+
+        canvasX = event.pageX - totalOffsetX;
+        canvasY = event.pageY - totalOffsetY;
+
+        return {x: canvasX, y: canvasY}
+    }
+    HTMLCanvasElement.prototype.relMouseCoords = relMouseCoords;
+    points = [// a cube
+        {x: 1, y: 1, z: 1},
+        {x: -1, y: -1, z: 1},
+        {x: -1, y: 1, z: -1},
+        {x: 1, y: -1, z: -1},
+        {x: -1, y: 1, z: 1},
+        {x: 1, y: -1, z: 1},
+        {x: 1, y: 1, z: -1},
+        {x: -1, y: -1, z: -1},
+    ];
+    function readSettings() {
+        var canvas = document.querySelector('#myCanvas');
+        var viewportWidth = canvas.width;
+        var viewportHeight = canvas.height;
+        var cameraHorizontalFov = parseInt(document.getElementById('cameraFov').value); // degrees
+        var scale = 500;
+        var cameraViewportDistance = Math.tan(Math.PI * (cameraHorizontalFov / 2) / 180) * scale / (viewportWidth / 2 );
+        var cameraPos = {
+            x: parseFloat(document.getElementById('cameraX').value),
+            y: parseFloat(document.getElementById('cameraY').value),
+            z: parseFloat(document.getElementById('cameraZ').value)
+        };
+        var focus = {
+            x: parseFloat(document.getElementById('focusX').value),
+            y: parseFloat(document.getElementById('focusY').value),
+            z: parseFloat(document.getElementById('focusZ').value)
+        };
+        var cameraFocusVector = normalize(vector(focus, cameraPos));
+        var viewportCenter = {
+            x: cameraPos.x - (cameraViewportDistance * cameraFocusVector.x),
+            y: cameraPos.y - (cameraViewportDistance * cameraFocusVector.y),
+            z: cameraPos.z - (cameraViewportDistance * cameraFocusVector.z),
+        };
+        var viewportFocusVector = vector(focus, viewportCenter);
+        var viewportNormal = normalize(viewportFocusVector);
+        var zInt = focus.z + (vectorMag(viewportFocusVector) / dot(viewportNormal, {x: 0, y: 0, z: 1}));
+        var viewportYPlus = normalize({x: focus.x - viewportCenter.x, y: focus.y - viewportCenter.y, z: zInt - viewportCenter.z});
+        var viewportXPlus = normalize(cross(viewportNormal, viewportYPlus));
+        return {
+            focus: focus,
+            cameraPos: cameraPos,
+            viewportNormal: viewportNormal,
+            viewportCenter: viewportCenter,
+            scale: scale,
+            viewportYPlus: viewportYPlus,
+            viewportXPlus: viewportXPlus,
+            viewportWidth: viewportWidth,
+            viewportHeight: viewportHeight,
+        };
+    }
+    var s = readSettings();
+    function render() {
+        clearCanvas();
+        drawOrigin();
+        points.forEach(function(p) {
+            var pV = mapToViewport(p);
+            pV.color = '#FF0000';
+            drawPoint(pV);
+        });
+    }
+    function updateAndRender () {
+        s = readSettings();
+        render();
+    }
+    function pointStr(p) {
+        return '[x: ' + p.x + ', y: ' + p.y + ', z: ' + p.z + ']';
+    }
+    function vector(a, b) {
+        return {x: b.x - a.x, y: b.y - a.y, z: b.z - a.z};
+    }
+    function vectorMag(point) {
+        return Math.sqrt(Math.pow(point.x, 2) + Math.pow(point.y, 2) + Math.pow(point.z, 2));
+    }
+    function normalize(vector) {
+        var mag = vectorMag(vector);
+        return {x: vector.x / mag, y: vector.y / mag, z: vector.z / mag};
+    }
+    function dot(a, b) {
+        return ((a.x * b.x) + (a.y * b.y) + (a.z * b.z));
+    }
+    function clearCanvas() {
+        var context = getContext();
+        context.canvas.width = context.canvas.width;
+    }
+    function cross(a, b) {
+        return {
+            x: (a.y * b.z) - (a.z * b.y),
+            y: (a.z * b.x) - (a.x * b.z),
+            z: (a.x * b.y) - (a.y * b.x),
+        };
+    }
+    function getContext() {
+        return document.getElementById("myCanvas").getContext("2d");
+    }
+    function drawPoint(point) {
+        var c = getContext();
+        var radius = 2;
+        c.beginPath();
+        c.lineWidth = 1;
+        c.strokeStyle = point.color ? point.color : '#000000';
+        c.fillStyle = point.color ? point.color : '#000000';
+        c.arc(point.x - (radius / 2), point.y - (radius / 2), 2, 0, 2 * Math.PI);
+        c.stroke();
+        c.fill();
+    }
+    function drawLine(startPoint, endPoint, color) {
+        var c = getContext();
+        c.beginPath();
+        c.moveTo(startPoint.x, startPoint.y);
+        c.lineTo(endPoint.x, endPoint.y);
+        c.lineWidth = 3;
+        c.strokeStyle = color;
+        c.stroke();
+    }
+    function mapToViewport (p) {
+        var bc = vector(s.cameraPos, p);
+        var t = ((-1 * s.viewportNormal.x * p.x) + (s.viewportNormal.x * s.viewportCenter.x) - (s.viewportNormal.y * p.y) + (s.viewportNormal.y * s.viewportCenter.y) - (s.viewportNormal.z * p.z) + (s.viewportNormal.z * s.viewportCenter.z))
+                / ((s.viewportNormal.x * bc.x) + (s.viewportNormal.y * bc.y) + (s.viewportNormal.z * bc.z));
+        var interceptPoint = {x: p.x + (t * bc.x), y: p.y + (t * bc.y), z: p.z + (t * bc.z)};
+        var interceptVector = vector(interceptPoint, s.viewportCenter);
+        return {
+            x: (s.viewportWidth / 2) + (dot(s.viewportXPlus, interceptVector) * s.scale),
+            y: (s.viewportHeight / 2) + (dot(s.viewportYPlus, interceptVector) * s.scale),
+            color: p.color
+        };
+    }
+    function draw3DPoint(p) {
+        drawPoint(mapToViewport(p));
+    }
+    function drawOrigin() {
+        drawLine(mapToViewport({x: 0, y: 0, z: 0}), mapToViewport({x: 1, y: 0, z: 0}), '#00FFFF');
+        drawLine(mapToViewport({x: 0, y: 0, z: 0}), mapToViewport({x: 0, y: 1, z: 0}), '#00FF00');
+        drawLine(mapToViewport({x: 0, y: 0, z: 0}), mapToViewport({x: 0, y: 0, z: 1}), '#0000FF');
+    }
+    [].slice.call(document.querySelectorAll("input")).forEach(function (i) {
+        i.onchange = function () {
+            updateAndRender();
+        }
+    });
+    var angle = 45;
+    var rotationRate = 36; // degrees / sec
+    var radius = 10;
+    var lastFrame = 0;
+    function rotate() {
+        angle = (angle + (rotationRate * (Date.now() - lastFrame) / 1000)) % 360;
+        document.getElementById('cameraX').value = radius * Math.cos(angle * Math.PI / 180);
+        document.getElementById('cameraY').value = radius * Math.sin(angle * Math.PI / 180);
+        updateAndRender();
+        lastFrame = Date.now();
+    }
+    var interval = false;
+    document.getElementById('rotate').onclick = function (event) {
+        if (interval) {
+            clearInterval(interval);
+            interval = false;
+        } else {
+            lastFrame = Date.now();
+            interval = setInterval(rotate, 50);
+        }
+    };
+    render();
+</script>
+</body>
+</html>
