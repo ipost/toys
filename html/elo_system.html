@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title></title>
+    <style type="text/css">
+        body {
+            font-family: "Helvetica Neue", "Arial", sans-serif;
+        }
+        #container{
+            display: table;
+        }
+        #chart{
+            width: 500px;
+            height: 300px;
+        }
+        .idCell {
+            display: none;
+        }
+        #controls {
+            display: table-cell;
+            width: 450px;
+            vertical-align: top;
+            margin-left: 10px;
+        }
+        #players tr > :nth-child(1) {
+            width: 6em;
+        }
+        #players tr > :nth-child(1) > input {
+            width: 6em;
+        }
+        #players tr > :nth-child(2) {
+            width: 5em;
+        }
+        #players tr > :nth-child(2) > input {
+            width: 5em;
+        }
+        #players tr > :nth-child(3) {
+            width: 5em;
+        }
+        #players tr > :nth-child(3) > input {
+            width: 5em;
+        }
+    </style>
+    <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
+    <script type="text/javascript">
+        google.charts.load('current', {'packages':['corechart']});
+    </script>
+<body>
+<div id="container">
+    <div id="chart"></div>
+    <div id="controls">
+        <label>Rounds: <input id="rounds" type="number" value="50"></label>
+        <input type="button" value="Play" id="playRounds"><br>
+        <input type="button" value="Add Player" id="addPlayer"><br>
+        <table id="players">
+            <tr>
+                <th>Name</th>
+                <th>Skill</th>
+                <th>Elo</th>
+                <th>Difference</th>
+                <th></th>
+            </tr>
+        </table>
+    </div>
+</div>
+<script type="text/javascript">
+    var players = [
+        {name: 'justin', skill: 800, elo: 1500},
+        {name: 'steve', skill: 900, elo: 1500},
+        {name: 'rodney', skill: 1000, elo: 1500},
+        {name: 'susan', skill: 1100, elo: 1500},
+        {name: 'johnny', skill: 1200, elo: 1500},
+        {name: 'melissa', skill: 1300, elo: 1500},
+        {name: 'abigail', skill: 1400, elo: 1500},
+        {name: 'lee', skill: 1500, elo: 1500},
+        {name: 'alex', skill: 1600, elo: 1500},
+        {name: 'chase', skill: 1700, elo: 1500},
+        {name: 'dan', skill: 1800, elo: 1500},
+        {name: 'sam', skill: 1900, elo: 1500},
+        {name: 'quentin', skill: 2000, elo: 1500},
+        {name: 'robin', skill: 2100, elo: 1500},
+        {name: 'magnus', skill: 2200, elo: 1500},
+    ];
+    for (var i = 0; i < players.length; i++) {
+        players[i].id = i;
+    }
+    function drawChart() {
+        var data = new google.visualization.DataTable();
+        data.addColumn('number', 'Real Elo');
+        data.addColumn('number', 'Earned Elo');
+        data.addColumn({type: 'string', role: 'tooltip'});
+        data.addRows(players.map (function(p) { return [p.skill, p.elo, p.name + "\nskill: " + p.skill + "\nElo: " + p.elo] }));
+        var options = {
+            title: 'Real Elo vs. Earned Elo',
+            hAxis: {title: 'Real Elo', minValue: 0, maxValue: 2500},
+            vAxis: {title: 'Earned Elo', minValue: 0, maxValue: 2500},
+            legend: 'none'
+        };
+        var chart = new google.visualization.ScatterChart(document.getElementById('chart'));
+        chart.draw(data, options);
+    }
+    var k = 32;
+    function playRounds(n) {
+        console.log('Playing ' + n + ' rounds')
+        for (; n > 0; n--) {
+            shuffle(players);
+            for (var i = 0; i < players.length - 1; i += 2) {
+                var p1 = players[i], p2 = players[i + 1];
+                doesP1Win(p1, p2) ? updatePlayers(p1, p2) : updatePlayers(p2, p1);
+            }
+        }
+    }
+    function doesP1Win(p1, p2) {
+        var q1 = Math.pow(10.0, p1.skill / 400.0), q2 = Math.pow(10.0, p2.skill / 400.0);
+        var e1 = q1 / (q1 + q2);
+        return Math.random() < e1;
+    }
+    function updatePlayers(winner, loser) {
+        var qW = Math.pow(10.0, winner.elo / 400.0), qL = Math.pow(10.0, loser.elo / 400.0);
+        var eW = qW / (qW + qL), eL = qL / (qW + qL);
+        winner.elo = winner.elo + (k * (1 - eW));
+        loser.elo = loser.elo + (k * (0 - eL));
+    }
+    function shuffle(array) {
+        for (var i = 0; i < array.length - 1; i += 1) {
+            var temp = array[i];
+            var j = Math.floor(Math.random() * array.length);
+            array[i] = array[j];
+            array[j] = temp;
+        }
+    }
+    document.getElementById('playRounds').onclick = function() {
+        readPlayerTable();
+        playRounds(parseInt(document.getElementById('rounds').value));
+        updatePlayerTable();
+        drawChart();
+    };
+    document.getElementById('addPlayer').onclick = function() {
+        var newPlayer = {name: 'new player', skill: 1500, elo: 1500};
+        insertIntoPlayerTable(newPlayer);
+        players.push(newPlayer);
+        drawChart();
+    };
+    function updatePlayerTable() {
+        var table = document.getElementById('players');
+        while(table.rows.length > 1) {
+            table.deleteRow(1);
+        }
+        players.sort(function (a, b) {
+            return a.skill - b.skill;
+        }).forEach(function (p) {
+            insertIntoPlayerTable(p);
+        });
+        [].slice.call(document.querySelectorAll("input")).forEach(function (i) {
+            i.onchange = updateModelFromTable;
+        });
+    }
+    function updateModelFromTable() {
+        readPlayerTable();
+        drawChart();
+    }
+    function insertIntoPlayerTable(p) {
+        var row = document.getElementById('players').insertRow(-1);
+
+        var nameCell = row.insertCell(-1);
+        var nameInput = document.createElement('input');
+        nameInput.type = 'text';
+        nameInput.value = p.name;
+        nameInput.onchange = updateModelFromTable;
+        nameCell.appendChild(nameInput);
+
+        var skillCell = row.insertCell(-1);
+        var skillInput = document.createElement('input');
+        skillInput.type = 'number';
+        skillInput.value = Math.round(p.skill);
+        skillInput.onchange = updateModelFromTable;
+        skillCell.appendChild(skillInput);
+
+        var eloCell = row.insertCell(-1);
+        var eloInput = document.createElement('input');
+        eloInput.type = 'number';
+        eloInput.value = Math.round(p.elo);
+        eloInput.onchange = updateModelFromTable;
+        eloCell.appendChild(eloInput);
+
+        var differenceCell = row.insertCell(-1);
+        var differenceText = document.createTextNode(Math.round(p.elo - p.skill));
+        differenceCell.appendChild(differenceText);
+
+        var removeCell = row.insertCell(-1);
+        var removeInput = document.createElement('input');
+        removeInput.type = 'button';
+        removeInput.value = 'Remove';
+        removeInput.onclick = function() {
+            row.parentNode.removeChild(row);
+            updateModelFromTable();
+        };
+
+        var idCell = row.insertCell(-1);
+        var idText = document.createTextNode(p.id);
+        idCell.className = 'idCell';
+        idCell.appendChild(idText);
+
+        removeCell.appendChild(removeInput);
+    }
+    function readPlayerTable() {
+        var rows = document.getElementById('players').rows;
+        players = [].slice.call(rows, 1, rows.length).map(function (row) {
+            return {
+                name: row.cells[0].children[0].value,
+                skill: parseInt(row.cells[1].children[0].value),
+                elo: parseInt(row.cells[2].children[0].value),
+                id: parseInt(row.cells[3].innerHTML)
+            };
+        });
+    }
+    google.charts.setOnLoadCallback(function () {
+        updatePlayerTable();
+        drawChart();
+    });
+</script>
+</body>
+</html>
