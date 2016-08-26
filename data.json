@@ -1,13 +1,13 @@
 [
   {
-    "name": "L System engine",
+    "name": "2D L-system engine",
     "file_name": "l_system.html",
-    "description": "l system description"
+    "description": "Generate patterns by defining rules in an L-system"
   },
   {
     "name": "Ultra basic 3D projection demo",
     "file_name": "3d.html",
-    "description": "I have no idea what I'm doing. It breaks pretty bad for some camera angles"
+    "description": "I tried to implement a 3d projection without looking at any algorithms or equations using just what I can remember from my undergrad graphics course. I have no idea what I'm doing. It breaks pretty bad sometimes. Very incomplete."
   },
   {
     "name": "Elo system simulation",
@@ -16,7 +16,7 @@
   },
   {
     "name": "Tree pattern generator",
-    "file_name": "fractal.html",
+    "file_name": "tree_pattern.html",
     "description": "Generates colorful patterns based on a tree structure"
   },
   {
