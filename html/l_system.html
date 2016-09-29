@@ -1,154 +1,279 @@
 <!DOCTYPE html>
-<html lang="en">
-<head>
+<html lang="en" ng-app="lsys">
+  <head>
     <meta charset="UTF-8">
     <title></title>
+    <script src="//ajax.googleapis.com/ajax/libs/angularjs/1.5.7/angular.min.js"></script>
     <style type="text/css">
         body {
-            font-family: "Helvetica Neue", "Arial", sans-serif;
-            line-height: 1.6;
+          font-family: "Helvetica Neue", "Arial", sans-serif;
+          line-height: 1.6;
         }
         #polySettings > div:nth-child(2n) {
-            background-color: #CCCCCC;
+          background-color: #CCCCCC;
         }
-        .enableColumn > input {
-            width: 100%;
+        .disabled-rule {
+          opacity: 0.333;
         }
-        .colorColumn > input {
-            width: 100%;
+        input.ng-invalid {
+          background-color: #F66;
         }
-        .degreeColumn > input {
-            width: 100%;
+        .rule {
         }
-        .xIntervalColumn > input {
-            width: 100%;
+        .symbol, .pred {
+          text-align: center;
+          width: 1em;
+        }
+        table {
+        }
+        .table-container {
+          margin-top: 10px;
+          padding: 5px;
+          border: 1px solid black;
+          border-radius: 5px;
+        }
+        .table-title {
+          margin: 0px;
+          text-align: center;
+        }
+        #controls > * {
+          vertical-align: top;
+          display: inline-block;
         }
     </style>
-</head>
-<body>
-<canvas id="myCanvas" width="800" height="600" style="border:2px solid black;margin:auto"></canvas>
-<input type="button" value="Clear" id="clearBtn">
-
-<div>
-    <label>Axiom: <input type="text" id="axiom" value="0"></label>
-    <label>Iterations: <input type="number" id="iterations" value="4"></label>
-    <label>Segment Length: <input type="number" id="segmentLength" value="5"></label>
-    <label>Turn angle: <input type="number" id="turnAngle" value="60"></label>
-    <div>
-        Rules<br>
-        <div class="rule"><input type="text" value="1" class="pred">→<input type="text" value="11" class="succ"></div>
-        <div class="rule"><input type="text" value="0" class="pred">→<input type="text" value="1[0]0" class="succ"></div>
-        <div class="rule"><input type="text" value="A" class="pred">→<input type="text" value="+B-A-B+" class="succ"></div>
-        <div class="rule"><input type="text" value="B" class="pred">→<input type="text" value="-A+B+A-" class="succ"></div>
+  </head>
+  <body ng-controller="LSysController">
+    <canvas id="myCanvas" width="800" height="600" style="border:2px solid black;margin:auto"></canvas>
+    <br>
+    <a href="https://en.wikipedia.org/wiki/L-system" target="_blank" rel="noopener noreferrer">Learn About L-Systems</a>
+    <div id="controls">
+      <div class="table-container">
+        <table>
+          <tr><td>Axiom:</td><td><input type="text" id="axiom" ng-model="axiom"></td></tr>
+          <tr><td>Iterations:</td><td><input type="number" id="iterations" ng-model="iterations"></td></tr>
+          <tr><td>Segment Length:</td><td><input type="number" id="segmentLength" ng-model="segLength"></td></tr>
+          <tr><td>Turn angle:</td><td><input type="number" id="turnAngle" ng-model="turnAngle"></td></tr>
+        </table>
+      </div>
+      <div class="table-container">
+        <table>
+          <tr><td>Origin X:</td><td><input type="number" ng-model="originX"></td></tr>
+          <tr><td>Origin Y:</td><td><input type="number" ng-model="originY"></td></tr>
+          <tr><td>Origin Rotation:</td><td><input type="number" ng-model="originRotation"></td></tr>
+        </table>
+      </div>
+      <br>
+      <div class="table-container">
+        <h3 class="table-title">Rules</h3>
+        <table id="rules">
+          <tr><th>Predecessor</th><th/><th>Successor</th><th>Enabled</th></tr>
+          <tr class="rule" ng-class="ruleFor(rule.predecessor) == rule ? '' : 'disabled-rule'" ng-repeat="rule in rules">
+            <td><input type="text" ng-model="rule.predecessor" class="pred" ng-maxlength="1"></td>
+            <td>→</td>
+            <td><input type="text" ng-model="rule.successor" class="succ"></td>
+            <td><input type="checkbox" ng-model="rule.enabled" class="enable"></td>
+          </tr>
+        </table>
+        <input type="button" ng-click="addRule()" value="Add Rule">
+      </div>
+      <div class="table-container">
+        <h3 class="table-title">Instructions</h3>
+        <table id="instructions">
+          <tr><th>Symbol</th><th>Function</th><th>Color</th><th>Magnitude</th></tr>
+          <tr class="instruction" ng-class="1 == 1 ? '' : 'disabled-rule'" ng-repeat="instruction in instructions">
+            <td><input type="text" ng-model="instruction.symbol" class="symbol" ng-maxlength="1"></td>
+            <td><select ng-model="instruction.defn" class="defn">
+                <option ng-repeat="func in availableInstructionDefns()" value="{{func}}">{{func}}</option>
+              </select></td>
+              <td><input type="color" ng-model="instruction.color" class="color"></td>
+              <td><input type="number" ng-model="instruction.magnitude" class="magnitude" step="0.05"></td>
+          </tr>
+        </table>
+        <input type="button" ng-click="addInstruction()" value="Add Instruction">
+      </div>
     </div>
-    <div id="eq"></div>
-</div>
-<script type="text/javascript">
-    function clearCanvas() {
-        var context = getContext();
-        context.canvas.width = context.canvas.width;
+    <div id="eq" ng-bind="state"></div>
+    <script type="text/javascript">
+function randomColor() {
+  return '#' + [0,0,0].map(function() { return Math.floor(Math.random() * 192 + 64).toString(16) }).join('');
+}
+var app = angular.module('lsys', []);
+app.controller('LSysController', function($scope) {
+  // instruction defaults
+  $scope.instructions = [
+    {symbol: '0',
+     defn: 'drawForward',
+     color: randomColor(),
+     magnitude: 1},
+    {symbol: '1',
+     defn: 'drawForward',
+     color: randomColor(),
+     magnitude: 1},
+    {symbol: '[',
+     defn: 'pushPos',
+     color: randomColor(),
+     magnitude: 1},
+    {symbol: ']',
+     defn: 'popPos',
+     color: randomColor(),
+     magnitude: 1},
+    {symbol: '+',
+     defn: 'turnLeft',
+     color: randomColor(),
+     magnitude: 1},
+    {symbol: '-',
+     color: randomColor(),
+     defn: 'turnRight',
+     magnitude: 1},
+    {symbol: 'A',
+     defn: 'drawForward',
+     color: randomColor(),
+     magnitude: 1},
+    {symbol: 'B',
+     defn: 'drawForward',
+     color: randomColor(),
+     magnitude: 1},
+  ];
+
+  $scope.instructionDefns = {
+    'drawForward': function(pos, stack, color, magnitude) {drawForward(pos, $scope.segLength * magnitude, color)},
+    'noOp': function() {},
+    'turnLeft': function(pos, stack, color, magnitude) {turnLeft(pos, -1 * $scope.turnAngle * magnitude)},
+    'turnRight': function(pos, stack, color, magnitude) {turnLeft(pos, $scope.turnAngle * magnitude)},
+    'pushPos': function(pos, stack) {pushPos(pos, stack)},
+    'popPos': function(pos, stack) {popPos(pos, stack)},
+  };
+  $scope.availableInstructionDefns = function() {
+    return Object.keys($scope.instructionDefns);
+  };
+
+  // initial values
+  $scope.axiom = "0";
+  $scope.iterations = 4;
+  $scope.segLength = 5;
+  $scope.turnAngle = 60;
+  $scope.rules = [
+    {predecessor: '1', successor: '11', enabled: true},
+    {predecessor: '0', successor: '1[+0]-0', enabled: true},
+    {predecessor: 'A', successor: '+B-A-B+', enabled: true},
+    {predecessor: 'B', successor: '-A+B+A-', enabled: true},
+  ];
+  $scope.originX = document.getElementById('myCanvas').width / 2;
+  $scope.originY = document.getElementById('myCanvas').height / 3;
+  $scope.originRotation = 90;
+
+  // update state using rules applied to axiom iteration times
+  $scope.updateState = function() {
+    var state = $scope.axiom;
+    for (var i = 0; i < $scope.iterations; i++) {
+      state = state.split('').map(function (ch) {
+        var rule = $scope.ruleFor(ch);
+        return rule ? rule.successor : ch;
+      }).join('');
     }
-    var instructions = {
-        '0': drawForward,
-        '1': drawForward,
-        'A': drawForward,
-        'B': drawForward,
-        'F': drawForward,
-        'X': function(){},
-        '[': function (pos, stack) {
-            pushPos(pos, stack);
-            turnLeft(pos, turnAngle);
-        },
-        ']': function (pos, stack) {
-            popPos(pos, stack);
-            turnLeft(pos, -1 * turnAngle);
-        },
-        '-': function (pos) {
-            turnLeft(pos, turnAngle);
-        },
-        '+': function (pos) {
-            turnLeft(pos, -1 * turnAngle);
-        },
-    };
-    var segmentLength = 5;
-    var turnAngle = 60;
-    function render() {
-        clearCanvas();
-        var iterations = parseInt(document.getElementById('iterations').value);
-        segmentLength = parseInt(document.getElementById('segmentLength').value);
-        turnAngle = parseInt(document.getElementById('turnAngle').value);
-        var rules = {};
-        [].slice.call(document.querySelectorAll('.rule')).forEach(function(ruleDiv) {
-            rules[ruleDiv.querySelector('.pred').value] = ruleDiv.querySelector('.succ').value;
-        });
-        var state = document.getElementById('axiom').value;
-        for (var i = 0; i < iterations; i++) {
-            state = applyRules(state, rules);
-        }
-        document.querySelector('#eq').innerHTML = state;
-        var pos = {x: document.getElementById('myCanvas').width / 2, y: document.getElementById('myCanvas').height, facing: -90};
-        var stack = [];
-        state.split('').forEach(function (instr) {
-            instructions[instr](pos, stack);
-        });
-    }
-    function drawForward(pos) {
-        var endPos = {
-            x: pos.x + (segmentLength * Math.cos(pos.facing * Math.PI / 180)),
-            y: pos.y + (segmentLength * Math.sin(pos.facing * Math.PI / 180))
-        };
-        drawLine(pos, endPos, '#000');
-        pos.x = endPos.x;
-        pos.y = endPos.y;
-    }
-    function clone(o) {
-        return JSON.parse(JSON.stringify(o));
-    }
-    function pushPos(pos, stack) {
-        stack.push(clone(pos));
-    }
-    function popPos(pos, stack) {
-        var p = stack.pop();
-        pos.x = p.x;
-        pos.y = p.y;
-        pos.facing = p.facing;
-    }
-    function turnLeft(p, degrees) {
-        p.facing = p.facing + degrees;
-    }
-    function applyRules(state, rules) {
-        return state.split('').map(function (ch) {
-            return rules[ch] ? rules[ch] : ch;
-        }).join('');
-    }
-    function drawLine(startPoint, endPoint, color) {
-        var c = getContext();
-        c.beginPath();
-        c.moveTo(startPoint.x, startPoint.y);
-        c.lineTo(endPoint.x, endPoint.y);
-        var previousColor = c.strokeStyle;
-        c.lineWidth = 3;
-        c.strokeStyle = color;
-        c.stroke();
-        c.strokeStyle = previousColor;
-    }
-    function getContext() {
-        return document.getElementById("myCanvas").getContext("2d");
-    }
-    function drawPoint(coords) {
-        var c = getContext();
-        var radius = 2;
-        c.beginPath();
-        c.lineWidth = 2;
-        c.arc(coords.x - (radius / 2), coords.y - (radius / 2), 3, 0, 2 * Math.PI);
-        c.stroke();
-    }
-    [].slice.call(document.querySelectorAll("input")).forEach(function (i) {
-        i.onchange = function () {
-            render();
-        }
+    $scope.state = state;
+  }
+
+  // get the active rule for a symbol
+  $scope.ruleFor = function(ch) {
+    return $scope.rules.find(function(rule) {
+      return rule.predecessor == ch && rule.enabled;
     });
-    render();
-</script>
-</body>
+  }
+
+  // execute state to draw canvas
+  $scope.render = function() {
+    clearCanvas();
+    var pos = {x: $scope.originX, y: document.getElementById('myCanvas').height - $scope.originY, facing: -1 * $scope.originRotation};
+    var stack = [];
+    $scope.state.split('').forEach(function (symbol) {
+      var instr = $scope.instructions.find(function(inst) {
+        return inst.symbol == symbol;
+      });
+      $scope.instructionDefns[instr.defn](pos, stack, instr.color, instr.magnitude);
+    });
+  }
+
+  // update canvas when state or display parameters change
+  $scope.$watch(function() {return [$scope.state, $scope.segLength, $scope.turnAngle, $scope.originX, $scope.originY, $scope.originRotation, $scope.instructions]}, function(newVal, oldVal) {
+    var s = Date.now();
+    $scope.render();
+    console.log('end render: ' + (Date.now() - s) + 'ms');
+  }, true);
+
+  // update state when rules, axiom, or iterations change
+  $scope.$watch(function(){return [$scope.rules, $scope.iterations, $scope.axiom]}, function(newVal, oldVal) {
+    $scope.rules.map(function(rule) {return rule.successor});
+    var s = Date.now();
+    $scope.updateState();
+    console.log('end state update: ' + (Date.now() - s) + 'ms');
+  }, true);
+
+  $scope.addRule = function() {
+    $scope.rules.push({predecessor: '', successor: '', enabled: true})
+  };
+
+  $scope.addInstruction = function() {
+    $scope.instructions.push({symbol: '', defn: 'drawForward', magnitude: 1})
+  };
+
+  $scope.updateState();
+
+  $scope.dragStart = {x: 0, y: 0};
+  document.getElementById('myCanvas').onmousedown = function(e) {
+    $scope.dragStart.x = e.pageX;
+    $scope.dragStart.y = e.pageY;
+  };
+  document.getElementById('myCanvas').onmouseup = function(e) {
+    $scope.originX += (e.pageX - $scope.dragStart.x);
+    $scope.originY -= (e.pageY - $scope.dragStart.y);
+    $scope.$apply();
+  };
+});
+
+// canvas manipulation functions
+function clearCanvas() {
+  var context = getContext();
+  context.canvas.width = context.canvas.width;
+}
+function drawForward(pos, segmentLength, color) {
+  var endPos = {
+    x: pos.x + (segmentLength * Math.cos(pos.facing * Math.PI / 180)),
+    y: pos.y + (segmentLength * Math.sin(pos.facing * Math.PI / 180))
+  };
+  drawLine(pos, endPos, color);
+  pos.x = endPos.x;
+  pos.y = endPos.y;
+}
+function clone(o) {
+  return JSON.parse(JSON.stringify(o));
+}
+function pushPos(pos, stack) {
+  stack.push(clone(pos));
+}
+function popPos(pos, stack) {
+  var p = stack.pop();
+  pos.x = p.x;
+  pos.y = p.y;
+  pos.facing = p.facing;
+}
+function turnLeft(p, degrees) {
+  p.facing = p.facing + degrees;
+}
+function drawLine(startPoint, endPoint, color) {
+  var c = getContext();
+  c.beginPath();
+  c.moveTo(startPoint.x, startPoint.y);
+  c.lineTo(endPoint.x, endPoint.y);
+  var previousColor = c.strokeStyle;
+  c.lineWidth = 3;
+  c.strokeStyle = color;
+  c.stroke();
+  c.strokeStyle = previousColor;
+}
+function getContext() {
+  return document.getElementById("myCanvas").getContext("2d");
+}
+    </script>
+  </body>
 </html>
