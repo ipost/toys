@@ -1,23 +1,18 @@
 [
   {
+    "name": "Tree pattern generator",
+    "file_name": "tree_pattern.html",
+    "description": "Generates colorful patterns based on a tree structure"
+  },
+  {
     "name": "2D L-system engine",
     "file_name": "l_system.html",
     "description": "Generate patterns by defining rules in an L-system"
   },
   {
-    "name": "Ultra basic 3D projection demo",
-    "file_name": "3d.html",
-    "description": "I tried to implement a 3d projection without looking at any algorithms or equations using just what I can remember from my undergrad graphics course. I have no idea what I'm doing. It breaks pretty bad sometimes. Very incomplete."
-  },
-  {
     "name": "Elo system simulation",
     "file_name": "elo_system.html",
     "description": "Simulates players in a league with an Elo rating system"
-  },
-  {
-    "name": "Tree pattern generator",
-    "file_name": "tree_pattern.html",
-    "description": "Generates colorful patterns based on a tree structure"
   },
   {
     "name": "Arbitrary-degree curve fitting",
@@ -28,5 +23,10 @@
     "name": "Life",
     "file_name": "life.html",
     "description": "Conway's Game of Life"
+  },
+  {
+    "name": "Ultra basic 3D projection demo",
+    "file_name": "3d.html",
+    "description": "I tried to implement a 3d projection without looking at any algorithms or equations using just what I can remember from my undergrad graphics course. I have no idea what I'm doing. It breaks pretty bad sometimes. Very incomplete."
   }
 ]
