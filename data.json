@@ -10,6 +10,11 @@
     "description": "Generate patterns by defining rules in an L-system"
   },
   {
+    "name": "Radially Symmetric Drawing",
+    "file_name": "draw.html",
+    "description": "A simple paint tool to draw radially symmetrical images"
+  },
+  {
     "name": "Elo system simulation",
     "file_name": "elo_system.html",
     "description": "Simulates players in a league with an Elo rating system"

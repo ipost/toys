@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title></title>
+    <style type="text/css">
+        body {
+            font-family: "Helvetica Neue", "Arial", sans-serif;
+            margin: 0;
+        }
+        canvas {
+            position: absolute;
+            left: 0;
+            top: 0;
+            border: 2px solid black;
+        }
+        #canvasContainer {
+        }
+        #controls {
+          margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+<div id="canvasContainer">
+    <canvas id="myCanvas" style="z-index:1"></canvas>
+    <canvas id="grid" style="z-index:0"></canvas>
+</div>
+<div id="controls">
+    <input type="button" value="New" id="new">
+    <label>Slices <input type="number" value="8" id="slices"></label>
+    <label>Show Grid <input checked='checked' type="checkbox" id="gridToggle"></label>
+    <label>Color <input type="color" value="#AAAAAA" id="color"></label>
+</div>
+<div id="status"></div>
+<script type="text/javascript">
+    'use strict';
+    const PI = Math.PI;
+    const WIDTH = 6;
+    var SLICES = 12;
+    var SLICE_SIZE = 2 * PI / SLICES;
+    var canvas = document.getElementById('myCanvas');
+    var center = 0;
+    var oldMouse = 0;
+    function main() {
+        if (oldMouse) {
+            var color = document.getElementById('color').value;
+            var newAngle = getAngle(center, mouse) + PI;
+            var newRadius = Math.sqrt(Math.pow(center.x - mouse.x, 2)    + Math.pow(center.y - mouse.y, 2));
+            var oldAngle = getAngle(center, oldMouse) + PI;
+            var oldRadius = Math.sqrt(Math.pow(center.x - oldMouse.x, 2) + Math.pow(center.y - oldMouse.y, 2));
+            for (var i = 0; i < SLICES; i++) {
+                var p1 = {
+                          x: center.x + (Math.cos(newAngle + (i * SLICE_SIZE)) * newRadius),
+                          y: center.y + (Math.sin(newAngle + (i * SLICE_SIZE)) * newRadius)
+                };
+                var p2 = {
+                          x: center.x + (Math.cos(oldAngle + (i * SLICE_SIZE)) * oldRadius),
+                          y: center.y + (Math.sin(oldAngle + (i * SLICE_SIZE)) * oldRadius)
+                };
+                drawLine(p1, p2, {color: color});
+            }
+        }
+        oldMouse = mouse;
+    }
+    function reset() {
+        SLICES = parseInt(document.getElementById('slices').value);
+        SLICE_SIZE = 2 * PI / SLICES;
+        sizeCanvas();
+        drawGrid();
+        main();
+    }
+    function sizeCanvas() {
+        var h = (window.innerHeight - 5 - document.getElementById('controls').offsetHeight);
+        [canvas, document.getElementById("grid")].forEach(function(element) {
+            element.height = h;
+            element.width = h;
+            element.style.height = h + 'px';
+            element.style.width = h + 'px';
+        });
+        document.getElementById('canvasContainer').style.height = h + 'px';
+        document.getElementById('canvasContainer').style.width = h + 'px';
+        center = {x: (canvas.width / 2.0), y: (canvas.height / 2.0)};
+    }
+    window.addEventListener('resize', reset, false);
+    function getAngle(end, start){
+        var y_delt = end.y - start.y;
+        var x_delt = (end.x - start.x) || Number.MIN_VALUE;
+        return Math.atan(y_delt / x_delt) + ((x_delt > 0) ? 0 : PI);
+    }
+
+    // Drawing functions
+    function drawGrid() {
+        var c = document.getElementById("grid").getContext("2d");
+        c.canvas.width = c.canvas.width;
+        if (!document.getElementById('gridToggle').checked) return;
+        var h = c.canvas.height;
+        for(var i = 0; i < SLICES; i++) {
+            var angle = 2 * PI * i / SLICES;
+            c.beginPath();
+            c.moveTo(center.x, center.y);
+            c.lineTo(center.x + (h * Math.cos(angle)), center.y + (h * Math.sin(angle)));
+            c.lineWidth = 1;
+            c.strokeStyle = 'black';
+            c.lineCap = 'butt';
+            c.stroke();
+        }
+    }
+    function drawLine(start, end, appearance = {}) {
+        var c = getContext();
+        var h = c.canvas.height;
+        c.beginPath();
+        c.moveTo(start.x, start.y);
+        c.lineTo(end.x, end.y);
+        c.lineWidth = appearance.width || WIDTH;
+        c.strokeStyle = appearance.color || 'red';
+        c.lineCap = appearance.cap || 'round';
+        c.stroke();
+    }
+    function getContext() {
+        return document.getElementById("myCanvas").getContext("2d");
+    }
+
+    // UI Elements
+    document.getElementById("new").onclick = reset;
+    document.getElementById("slices").onchange = reset;
+    document.getElementById("gridToggle").onchange = function() {drawGrid()};
+    var mouse = 0;
+    document.getElementById("myCanvas").onmousedown = function (event) {
+        mouse = this.relMouseCoords(event);
+    };
+    document.getElementById("myCanvas").onmousemove = function (event) {
+        if (mouse) mouse = this.relMouseCoords(event);
+        main();
+    };
+    document.getElementById("myCanvas").onmouseup = function (event) {
+        mouse = 0;
+    };
+    reset();
+
+    function relMouseCoords(event) {
+        var totalOffsetX = 0;
+        var totalOffsetY = 0;
+        var canvasX = 0;
+        var canvasY = 0;
+        var currentElement = this;
+
+        do {
+            totalOffsetX += currentElement.offsetLeft - currentElement.scrollLeft;
+            totalOffsetY += currentElement.offsetTop - currentElement.scrollTop;
+        }
+        while (currentElement = currentElement.offsetParent)
+
+        canvasX = event.pageX - totalOffsetX;
+        canvasY = event.pageY - totalOffsetY;
+
+        return {x: canvasX, y: canvasY}
+    }
+    HTMLCanvasElement.prototype.relMouseCoords = relMouseCoords;
+</script>
+</body>
+</html>
