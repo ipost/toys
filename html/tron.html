@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title></title>
+    <style type="text/css">
+        body {
+            font-family: "Helvetica Neue", "Arial", sans-serif;
+        }
+        #help {
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+<canvas id="myCanvas" width="600" height="600" style="border:2px solid black;margin:auto"></canvas>
+<input type="button" value="Start" id="start">
+<input type="button" value="Reset" id="reset">
+<span id="fps"></span>
+<div id="status"></div>
+<div id="help"></div>
+<script type="text/javascript">
+//TODO: add player selection, controls rebinding, start countdown
+    'use strict';
+    const PI    = Math.PI;
+    const SPEED = 50.0;
+    const WIDTH = 12;
+    const TURNRATE = 235;
+    const INITIAL_LENGTH = 20;
+    var canvas = document.getElementById('myCanvas');
+    function newGame() { // game state
+        var startingLength = 60;
+        var newState = {
+            mode: 'pvp',
+            frameTimes: [],
+            started: 0,
+            players: [
+                {
+                    name: 'Red',
+                    startPos: {x: canvas.width / 2, y: (canvas.height / 2) + (WIDTH / 2)},
+                    segments: [],
+                    hitboxes: [],
+                    color: '#F44',
+                    controlRight: '1',
+                    controlLeft: '`',
+                },
+                {
+                    name: 'Blue',
+                    startPos: {x: canvas.width / 2, y: (canvas.height / 2) + (WIDTH / 2)},
+                    segments: [],
+                    hitboxes: [],
+                    color: '#44F',
+                    controlRight: 'v',
+                    controlLeft: 'c',
+                },
+                {
+                    name: 'Green',
+                    startPos: {x: canvas.width / 2, y: (canvas.height / 2) + (WIDTH / 2)},
+                    segments: [],
+                    hitboxes: [],
+                    color: '#4F4',
+                    controlRight: '8',
+                    controlLeft: '7',
+                },
+                {
+                    name: 'Yellow',
+                    startPos: {x: canvas.width / 2, y: (canvas.height / 2) - (WIDTH / 2)},
+                    segments: [],
+                    hitboxes: [],
+                    color: '#FF4',
+                    controlRight: '/',
+                    controlLeft: '.',
+                },
+            ],
+            livingPlayers: function() {
+                return this.players.filter(function(p) { return !p.killer; });
+            },
+            frameRate: function() {
+                return (1000.0 * this.frameTimes.length) / this.frameTimes.reduce(function(a, b) {
+                    return a + b;
+                }, 0);
+            }
+        };
+        var startPositions = [
+            {p: {x: 0.25 * canvas.width, y: 0.25 * canvas.width}, orientation: rads(180)},
+            {p: {x: 0.75 * canvas.width, y: 0.75 * canvas.width}, orientation: rads(0)},
+            {p: {x: 0.25 * canvas.width, y: 0.75 * canvas.width}, orientation: rads(90)},
+            {p: {x: 0.75 * canvas.width, y: 0.25 * canvas.width}, orientation: rads(270)},
+        ];
+        newState.players.forEach(function(player) {
+            var sp = startPositions.shift();
+            player.segments.push(sp.p);
+            player.segments.push(projectPoint(player.segments[0], player.segments[0], SPEED, sp.orientation));
+        });
+        let html = '<table><tr><td>Color</td><td>Turn left</td><td>Turn right</td></tr>';
+        newState.players.forEach(function(p) {
+            html += '<tr><td>' + p.name + '</td><td>' + p.controlLeft + '</td><td>' + p.controlRight + '</td></tr>';
+        });
+        html += '</table>';
+        document.getElementById('help').innerHTML = html;
+        return newState;
+    };
+    // game logic
+    var gs = newGame();
+    function startGame() {
+        gs.started = 1;
+        getContext().canvas.focus();
+        game();
+    }
+    var t = 0;
+    function game() {
+        if (!t) t = Date.now();
+        var timeStep = Date.now() - t;
+        updateFPS(timeStep);
+        if (gs.livingPlayers().length == 1) { // gameover state
+            gs.started = 0;
+            setStatus(gs.livingPlayers()[0].name + ' wins!');
+            return;
+        }
+        gs.livingPlayers().forEach(function(p) {
+            moveHead(p, timeStep);
+            if (gs.mode == 'pvp') moveTail(p, timeStep * 0.15);
+        });
+        checkDeaths();
+        drawPlayers();
+        t = Date.now();
+        requestAnimationFrame(game);
+    }
+    function updateFPS(frameTime) {
+        if(gs.frameTimes.length == 20) gs.frameTimes.shift();
+        gs.frameTimes.push(frameTime);
+        document.getElementById('fps').textContent = Math.round(gs.frameRate());
+    }
+    function moveHead(p, t) {
+        var moveDistance = (t / 1000.0) * SPEED;
+        var first = p.segments[0];
+        var second = p.segments[1];
+        if (keys.includes(p.controlLeft)) {
+            p.segments.unshift(projectPoint(second, first, moveDistance, rads(TURNRATE * t / 1000)));
+        } else if (keys.includes(p.controlRight)) {
+            p.segments.unshift(projectPoint(second, first, moveDistance, rads(-1 * TURNRATE * t / 1000)));
+        } else {
+            p.segments[0] = projectPoint(second, first, moveDistance, 0);
+            p.hitboxes.shift();
+        }
+        p.hitboxes.unshift(hitboxForSegment(second, first));
+    }
+    function moveTail(p, t) {
+        var moveDistance = (t / 1000.0) * SPEED;
+        while(moveDistance > 0) {
+            var last = p.segments[p.segments.length - 1]
+            var ntl  = p.segments[p.segments.length - 2]
+            var length = Math.sqrt(Math.pow(last.x - ntl.x, 2) + Math.pow(last.y - ntl.y, 2));
+            p.hitboxes.pop();
+            if (moveDistance >= length) {
+                moveDistance -= length; 
+            } else {
+                p.segments[p.segments.length - 1] = projectPoint(ntl, last, moveDistance * -1, 0);
+                moveDistance = 0;
+                p.hitboxes.push(hitboxForSegment(last, ntl));
+            }
+        }
+    }
+    function checkDeaths() {
+        var c = getContext();
+        var h = c.canvas.height;
+        var w = c.canvas.width;
+        gs.players.forEach(function(p) {
+            if ([p.hitboxes[0][0], p.hitboxes[0][1]].some(function(point) {
+                if (point.x < 0 || point.x > w || point.y < 0 || point.y > h) {
+                    p.killer = 'the wall';
+                    return true;
+                }
+            })) return;
+            gs.players.some(function(otherP) {
+                return [p.hitboxes[0][0], p.hitboxes[0][1]].some(function(point) {
+                    return otherP.hitboxes.slice((p == otherP) ? 20 : 0, otherP.hitboxes.length).some(function(hb) {
+                        if (isCollision(point, hb[1], hb[0], hb[2])) { 
+                            p.killer = otherP.name;
+                            return true;
+                        }
+                    });
+                });
+            });
+        });
+    }
+
+    // Math functions
+    function getAngle(end, start){
+        var y_delt = end.y - start.y;
+        var x_delt = (end.x - start.x) || Number.MIN_VALUE;
+        return Math.atan(y_delt / x_delt) + ((x_delt > 0) ? 0 : PI);
+    }
+    function projectPoint(start, end, amount, turn = 0) {
+        var angle = getAngle(end, start) + turn;
+        return {
+            x: end.x + (Math.cos(angle) * amount),
+            y: end.y + (Math.sin(angle) * amount)
+        };
+    }
+    function rads(degs) { return degs * PI / 180 }
+    function degs(rads) { return rads * 180 / PI }
+    function dot(a, b) { return (a.x * b.x) + (a.y * b.y) }
+    function hitboxForSegment(start, end) {
+        return [
+            projectPoint(start, end, WIDTH / 2, rads(90)),
+            projectPoint(start, end, WIDTH / 2, rads(-90)),
+            projectPoint(end, start, WIDTH / 2, rads(90)),
+            projectPoint(end, start, WIDTH / 2, rads(-90))
+        ]
+    }
+    function isCollision(p, a, b, d) {// http://math.stackexchange.com/a/190373
+        var ap = {x: p.x - a.x, y: p.y - a.y};
+        var ab = {x: b.x - a.x, y: b.y - a.y};
+        var ad = {x: d.x - a.x, y: d.y - a.y};
+        return (0 < dot(ap, ab) && dot(ap, ab) < dot(ab, ab)) &&
+               (0 < dot(ap, ad) && dot(ap, ad) < dot(ad, ad));
+    }
+
+    // Drawing functions
+    function drawPlayers() {
+        clearCanvas();
+        gs.players.forEach(function(p) {
+            drawPlayer(p);
+        });
+    }
+    function drawPlayer(p) {
+        var c = getContext();
+        var h = c.canvas.height;
+        c.beginPath();
+        c.moveTo(p.segments[0].x, h - p.segments[0].y);
+        for (var i = 1; i < p.segments.length - 1; i++) {
+            c.lineTo(p.segments[i].x, h - p.segments[i].y);
+        }
+        c.lineTo(p.segments[p.segments.length - 1].x, h - p.segments[p.segments.length - 1].y);
+        c.lineWidth = WIDTH;
+        c.strokeStyle = p.color;
+        c.lineCap = 'butt';
+        c.stroke();
+        drawSemicircle(p.segments[0], (PI) - getAngle(p.segments[0], p.segments[1])); // draw head
+    }
+    function clearCanvas() {
+        var context = getContext();
+        context.canvas.width = context.canvas.width;
+    }
+    function getContext() {
+        return document.getElementById("myCanvas").getContext("2d");
+    }
+    function drawPoint(point) {
+        var c = getContext();
+        var h = c.canvas.height;
+        c.lineWidth = 1;
+        c.fillStyle = 'black';
+        c.beginPath();
+        c.arc(point.x, h - point.y, 1, 0, 2 * PI);
+        c.fill();
+    }
+    function drawSemicircle(coords, angle) {
+        var c = getContext();
+        var radius = WIDTH / 2;
+        c.beginPath();
+        c.arc(coords.x,
+              (c.canvas.height - coords.y),
+              radius,
+              angle - (PI / 2),
+              angle + (PI / 2));
+        c.closePath();
+        c.fillStyle = '#6A6';
+        c.fill();
+    }
+    function setStatus(message) {document.getElementById('status').textContent = message;}
+
+    // UI Elements
+    document.getElementById("start").onclick = startGame;
+    document.getElementById("reset").onclick = function() {gs = newGame()};
+    document.getElementById("myCanvas").tabIndex = 100;
+    var keys = [];
+    document.getElementById("myCanvas").onkeydown = function (event) {
+        if (!keys.includes(event.key)) {
+            keys.push(event.key);
+        }
+    };
+    document.getElementById("myCanvas").onkeyup = function (event) {
+        if (keys.includes(event.key)) {
+            keys = keys.slice(0, keys.indexOf(event.key)).concat(keys.slice(keys.indexOf(event.key) + 1, keys.length));
+        }
+    };
+
+    drawPlayers();
+</script>
+</body>
+</html>
