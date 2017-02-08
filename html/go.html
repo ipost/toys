@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Go</title>
+    <style type="text/css">
+        body {
+            font-family: "Helvetica Neue", "Arial", sans-serif;
+            margin: 0;
+        }
+
+        #canvasContainer > * {
+            position: absolute;
+            left: 0;
+            top: 0;
+            border: 2px solid black;
+        }
+
+        #controls {
+            margin-top: 5px;
+            padding: 3px;
+        }
+
+        #scores {
+            display: inline-block;
+            border: 1px solid black;
+            padding: 3px;
+        }
+
+        #coords {
+            display: inline-block;
+        }
+    </style>
+</head>
+<body>
+<div id="canvasContainer">
+    <canvas id="control" style="z-index:9"></canvas>
+    <canvas id="territory" style="z-index:3"></canvas>
+    <canvas id="pieces" style="z-index:2"></canvas>
+    <canvas id="hover" style="z-index:1"></canvas>
+    <canvas id="grid" style="z-index:0"></canvas>
+</div>
+<div id="controls">
+    <input type="button" value="New" id="new">
+    <input type="button" value="Score" id="score">
+    <input type="button" value="Pass" id="pass">
+    <label>Show Territory<input type="checkbox" value="" id="showTerritory"></label>
+    <div id="scores"></div>
+    <div id="coords"></div>
+</div>
+<script type="text/javascript">
+    'use strict';
+    const KOMI = 6.5;
+    const UNOWNED = 93437;
+    const BLACK = 8129;
+    const WHITE = 912819;
+    var controlCanvas = document.getElementById('control');
+    var piecesCanvas = document.getElementById('pieces');
+    var hoverCanvas = document.getElementById('hover');
+    var gridCanvas = document.getElementById('grid');
+    var territoryCanvas = document.getElementById('territory');
+    var boards = [{size: 19, foci: [4, 10, 16], lineWidth: 1},
+                  {size: 3, foci: [2], lineWidth: 1}];
+    var board = boards[0];
+    function Point(x, y) {
+        this.x = x;
+        this.y = y;
+        this.owner = UNOWNED;
+    }
+    function Group(points) {
+        this.points = points.slice();
+        this.owner = points[0].owner;
+        this.size = points.length;
+        let border = this.points.map(function(p) {
+            return p.neighbors;
+        }).reduce(function(a, b) {
+            return a.concat(b)
+        }).filter(function(n){
+            return n.owner != points[0].owner
+        });
+        this.border = [...new Set(border)];
+        this.liberties = this.border.filter(function (p) {return p.owner == UNOWNED});
+        this.print = function() {
+            console.log(this.points.map(function(p){return 'x: ' + p.x + ', y: ' + p.y}).join("\n"))
+        };
+    }
+    function newGame() {
+        board.points = new Array(board.size);
+        board.turn = BLACK;
+        board.blackCaptures = 0;
+        board.whiteCaptures = 0;
+        for (let x = 0; x < board.size; x += 1) {
+            board.points[x] = new Array(board.size);
+            for (let y = 0; y < board.size; y += 1) {
+                board.points[x][y] = new Point(x, y);
+            }
+        }
+        for (let x = 0; x < board.size; x += 1) {
+            for (let y = 0; y < board.size; y += 1) {
+                board.points[x][y].neighbors = [board.points[x][y - 1],
+                                                board.points[x][y + 1],
+                                                board.points[x + 1] && board.points[x + 1][y],
+                                                board.points[x - 1] && board.points[x - 1][y]
+                ].filter(function(n){return n});
+            }
+        }
+        drawCanvas();
+        update();
+    }
+
+    function drawCanvas() {
+        let availableHeight = window.innerHeight - 15 - document.getElementById('controls').offsetHeight;
+        board.cellSize = Math.floor((availableHeight - (board.size * board.lineWidth)) / (board.size + 1));
+        board.pieceRadius = (board.cellSize + board.lineWidth) * 0.40;
+        board.h = (board.cellSize * (board.size + 1)) + (board.size * board.lineWidth);
+        [controlCanvas, piecesCanvas, gridCanvas, hoverCanvas, territoryCanvas].forEach(function (element) {
+            element.height = board.h;
+            element.width = board.h;
+            element.style.height = board.h + 'px';
+            element.style.width = board.h + 'px';
+            element.getContext('2d').translate(0.5, 0.5);
+        });
+        document.getElementById('canvasContainer').style.height = board.h + 'px';
+        document.getElementById('canvasContainer').style.width = board.h + 'px';
+        let c = gridCanvas.getContext("2d");
+        c.fillStyle = '#EEEEBB';
+        c.fillRect(0, 0, piecesCanvas.width, piecesCanvas.height);
+        c.globalAlpha = 1;
+        c.strokeStyle = 'black';
+        c.fillStyle = 'black';
+        c.lineWidth = board.lineWidth;
+        let drawGridLine = function(start, end) {
+            c.beginPath();
+            c.moveTo(start.x, start.y);
+            c.lineTo(end.x, end.y);
+            c.lineWidth = board.lineWidth;
+            c.strokeStyle = 'black';
+            c.lineCap = 'butt';
+            c.stroke();
+        };
+        for (let i = 0; i < board.size; i += 1) {
+            for (let j = 0; j < board.size; j += 1) {
+                board.points[i][j].displayX = (i + 1) * (board.cellSize + board.lineWidth);
+                board.points[i][j].displayY = (j + 1) * (board.cellSize + board.lineWidth);
+            }
+            let len = (i + 1) * (board.cellSize + board.lineWidth);
+            drawGridLine({
+                x: board.cellSize + board.lineWidth, y: len
+            }, {
+                x: board.size * (board.cellSize + board.lineWidth), y: len
+            });
+            drawGridLine({
+                x: len, y: board.cellSize + board.lineWidth
+            }, {
+                x: len, y: board.size * (board.cellSize + board.lineWidth)
+            });
+        }
+        board.foci.forEach(function (x) {
+            board.foci.forEach(function (y) {
+                c.beginPath();
+                c.arc(x * (board.cellSize + board.lineWidth), y * (board.cellSize + board.lineWidth), board.lineWidth * 2, 0, 2 * Math.PI);
+                c.fill();
+            });
+        });
+        drawPieces();
+    }
+    function drawPieces() {
+        let c = piecesCanvas.getContext("2d");
+        c.canvas.width = c.canvas.width;
+        board.points.reduce(function (a, b) {
+            return a.concat(b)
+        }).forEach(function (point) {
+            if (point.owner != UNOWNED) {
+                c.fillStyle = point.owner == BLACK ? 'black' : 'white';
+                c.beginPath();
+                c.arc(point.displayX + 0.5, point.displayY + 0.5, board.pieceRadius, 0, 2 * Math.PI);
+                c.fill();
+            }
+        });
+    }
+    window.addEventListener('resize', drawCanvas, false);
+    function nearestPoint(coords) {
+        let x = Math.round((coords.x - 1) / (board.cellSize + board.lineWidth)) - 1;
+        let y = Math.round((coords.y - 1) / (board.cellSize + board.lineWidth)) - 1;
+        return board.points[
+                x < 0 ? 0 : x == board.size ? x - 1 : x][
+                y < 0 ? 0 : y == board.size ? y - 1 : y];
+    }
+    controlCanvas.onclick = function (event) {
+        let point = nearestPoint(this.relMouseCoords(event));
+        if (point.owner != UNOWNED) return;
+        point.owner = board.turn;
+        update();
+        toggleTurn();
+    };
+    controlCanvas.onmousemove = function (event) {
+        let c = hoverCanvas.getContext("2d");
+        c.canvas.width = c.canvas.width;
+        let point = nearestPoint(this.relMouseCoords(event));
+        if (point.owner == UNOWNED) {
+            controlCanvas.style.cursor = 'pointer';
+            c.beginPath();
+            c.fillStyle = board.turn == BLACK ? 'rgba(0, 0, 0, 0.5)' : 'rgba(255, 255, 255, 0.75)';
+            c.arc(point.displayX + 0.5, point.displayY + 0.5, board.pieceRadius, 0, 2 * Math.PI);
+            c.fill();
+        } else {
+            controlCanvas.style.cursor = 'auto';
+        }
+        document.getElementById('coords').innerHTML = '[' + (point.x + 1) + ', ' + (point.y + 1) + ']';
+    };
+    function buildGroups() {
+        let points = board.points.reduce(function (a, b) {return a.concat(b)});
+        board.groups = [];
+        while (points.length > 0) {
+            let getGroup = function (p) {
+                let group = [p];
+                let neighborsGroup = p.neighbors.filter(function (n) {
+                    if (n.owner == p.owner && points.includes(n)) {
+                        points.splice(points.indexOf(n), 1);
+                        return true;
+                    }
+                });
+                neighborsGroup.forEach(function (n) {
+                    group = group.concat(getGroup(n));
+                });
+                return group;
+            };
+            board.groups.push(new Group(getGroup(points.pop())));
+        }
+        board.groups.forEach(function(g){
+            if (g.owner == UNOWNED) {
+                if (g.border.length > 0 && g.border.every(function(p) {return p.owner == WHITE})) {
+                    g.surrounder = WHITE;
+                } else if (g.border.length > 0 && g.border.every(function(p) {return p.owner == BLACK})) {
+                    g.surrounder = BLACK;
+                }
+            }
+        });
+    }
+    function performCaptures() {
+        let helper = function(g) {
+            if (g.owner != UNOWNED) {
+                if (g.liberties.length == 0) {
+                    g.points.forEach(function(p){p.owner = UNOWNED});
+                    g.owner == BLACK ? board.whiteCaptures += g.size : board.blackCaptures += g.size;
+                }
+            }
+        };
+        board.groups.filter(function(g){return g.owner != board.turn}).forEach(function(g){
+            helper(g)
+        });
+        buildGroups();
+        board.groups.filter(function(g){return g.owner == board.turn}).forEach(function(g){
+                helper(g)
+        });
+    }
+    function score() {
+        let blackScore = board.blackCaptures;
+        let whiteScore = board.whiteCaptures + KOMI;
+        board.groups.forEach(function(g){
+            if        ((g.owner == UNOWNED && g.surrounder == WHITE) || g.owner == WHITE) {
+                whiteScore += g.size;
+            } else if ((g.owner == UNOWNED && g.surrounder == BLACK) || g.owner == BLACK) {
+                blackScore += g.size;
+            }
+        });
+        document.getElementById('scores').innerHTML = 'Black: ' + blackScore + ' | White: ' + whiteScore;
+    }
+    function toggleTurn() {
+        board.turn = board.turn == BLACK ? WHITE : BLACK;
+    }
+    function update() {
+        buildGroups();
+        performCaptures();
+        buildGroups();
+        score();
+        drawPieces();
+        drawTerritory();
+    }
+    function drawTerritory() {
+        let c = territoryCanvas.getContext("2d");
+        c.canvas.width = c.canvas.width;
+        if (!document.getElementById('showTerritory').checked) return;
+        let whiteGroups = [];
+        let blackGroups = [];
+        board.groups.forEach(function(g){
+            if (g.owner == WHITE || g.surrounder == WHITE) whiteGroups.push(g);
+            if (g.owner == BLACK || g.surrounder == BLACK) blackGroups.push(g);
+        });
+        let helper = function(groups) {
+            groups.forEach(function(g){
+                g.points.forEach(function(p){
+                    c.fillRect(p.displayX - ((board.cellSize + board.lineWidth) / 2.0) + 0.5, p.displayY - ((board.cellSize + board.lineWidth) / 2.0) + 0.5,
+                            board.cellSize + board.lineWidth, board.cellSize + board.lineWidth);
+                });
+            });
+        };
+        c.fillStyle = 'white';
+        helper(whiteGroups);
+        c.fillStyle = 'black';
+        helper(blackGroups);
+    }
+    document.getElementById("new").onclick = newGame;
+    document.getElementById("score").onclick = update;
+    document.getElementById("pass").onclick = toggleTurn;
+    document.getElementById("showTerritory").onchange = drawTerritory;
+
+    newGame();
+
+    function relMouseCoords(event) {
+        var totalOffsetX = 0;
+        var totalOffsetY = 0;
+        var canvasX = 0;
+        var canvasY = 0;
+        var currentElement = this;
+
+        do {
+            totalOffsetX += currentElement.offsetLeft - currentElement.scrollLeft;
+            totalOffsetY += currentElement.offsetTop - currentElement.scrollTop;
+        }
+        while (currentElement = currentElement.offsetParent)
+
+        canvasX = event.pageX - totalOffsetX;
+        canvasY = event.pageY - totalOffsetY;
+
+        return {x: canvasX, y: canvasY}
+    }
+    HTMLCanvasElement.prototype.relMouseCoords = relMouseCoords;
+</script>
+</body>
+</html>
