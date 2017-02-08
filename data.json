@@ -15,6 +15,11 @@
     "description": "A simple paint tool to draw radially symmetrical images"
   },
   {
+    "name": "Go game",
+    "file_name": "go.html",
+    "description": "It's Go. Not all rules are implemented yet."
+  },
+  {
     "name": "Elo system simulation",
     "file_name": "elo_system.html",
     "description": "Simulates players in a league with an Elo rating system"
